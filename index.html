@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Счетчик Myotus 2025</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter :wght@400;600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+
+  <div class="counter-container">
+    <h2>Введите период:</h2>
+    <label>Дата начала:
+      <input type="date" id="startDateInput">
+    </label>
+    <label>Дата завершения:
+      <input type="date" id="endDateInput">
+    </label>
+
+    <div class="stats">
+      <div class="stat-item">Всего: <span id="totalDays">0</span> дн.</div>
+      <div class="stat-item">Прошло: <span id="daysPassed">0</span> дн.</div>
+      <div class="stat-item">Осталось: <span id="daysLeft">0</span> дн.</div>
+      <div class="stat-item">Прогресс: <span id="progressPercent">0%</span></div>
+      <div class="stat-item">Осталось времени: <span id="timeLeft">0 дн. 0 ч. 0 м.</span></div>
+    </div>
+
+    <!-- Круговая диаграмма -->
+    <canvas id="pieChart" width="400" height="400"></canvas>
+
+    <div class="actions">
+      <button onclick="downloadChart()">📷 Скачать график</button>
+      <button onclick="resetDates()">🔄 Сбросить</button>
+    </div>
+
+    <div class="error" id="errorMessage"></div>
+  </div>
+
+  <footer>
+    © Myotus 2025 | Умный счетчик с диаграммой
+  </footer>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js "></script>
+
+  <script>
+    const ctx = document.getElementById('pieChart').getContext('2d');
+    let pieChart;
+
+    function createChart(passed, remaining) {
+      if (pieChart) pieChart.destroy();
+
+      pieChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Прошло', 'Осталось'],
+          datasets: [{
+            label: 'Дни',
+            data: [passed, remaining],
+            backgroundColor: ['#4caf50', '#ff9800'],
+            borderColor: ['#ffffff', '#ffffff'],
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.label}: ${context.raw} дней`;
+                }
+              }
+            },
+            title: {
+              display: true,
+              text: 'Прогресс периода'
+            }
+          }
+        }
+      });
+    }
+
+    function updateCounter() {
+      const startDateStr = document.getElementById("startDateInput").value;
+      const endDateStr = document.getElementById("endDateInput").value;
+      const errorMessage = document.getElementById("errorMessage");
+
+      const totalDaysEl = document.getElementById("totalDays");
+      const daysPassedEl = document.getElementById("daysPassed");
+      const daysLeftEl = document.getElementById("daysLeft");
+      const timeLeftEl = document.getElementById("timeLeft");
+      const progressPercentEl = document.getElementById("progressPercent");
+
+      if (!startDateStr || !endDateStr) {
+        resetAll();
+        createChart(0, 0);
+        errorMessage.textContent = "Пожалуйста, введите обе даты.";
+        return;
+      }
+
+      const startDate = new Date(startDateStr);
+      const endDate = new Date(endDateStr);
+      const now = new Date();
+
+      // Нулевой час
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
+      now.setHours(0, 0, 0, 0);
+
+      const oneDay = 1000 * 60 * 60 * 24;
+
+      if (endDate <= startDate) {
+        errorMessage.textContent = "Ошибка: Конечная дата должна быть позже начальной.";
+        totalDaysEl.textContent = "Ошибка";
+        daysPassedEl.textContent = "0";
+        daysLeftEl.textContent = "0";
+        timeLeftEl.textContent = "Ошибка";
+        progressPercentEl.textContent = "Ошибка";
+        createChart(0, 0);
+        return;
+      } else {
+        errorMessage.textContent = "";
+      }
+
+      const totalDays = Math.floor((endDate - startDate) / oneDay);
+      let daysPassed = Math.max(0, Math.min(Math.floor((now - startDate) / oneDay), totalDays));
+      let daysLeft = totalDays - daysPassed;
+
+      if (now > endDate) {
+        daysPassed = totalDays;
+        daysLeft = 0;
+      }
+
+      // Оставшееся время
+      const nowExact = new Date();
+      const endExact = new Date(endDateStr);
+      const diffMs = endExact - nowExact;
+      let timeLeftText = "0 мин.";
+
+      if (diffMs > 0) {
+        const diffSec = Math.floor(diffMs / 1000);
+        const days = Math.floor(diffSec / 86400);
+        const hours = Math.floor((diffSec % 86400) / 3600);
+        const minutes = Math.floor((diffSec % 3600) / 60);
+        timeLeftText = `${days} дн. ${hours} ч. ${minutes} м.`;
+      } else {
+        timeLeftText = "Завершено";
+      }
+
+      // Процент
+      const percent = (daysPassed / totalDays) * 100;
+
+      // Обновление данных
+      totalDaysEl.textContent = totalDays;
+      daysPassedEl.textContent = daysPassed;
+      daysLeftEl.textContent = daysLeft;
+      timeLeftEl.textContent = timeLeftText;
+      progressPercentEl.textContent = `${Math.round(percent)}%`;
+
+      // Сохранение в localStorage
+      localStorage.setItem("startDate", startDateStr);
+      localStorage.setItem("endDate", endDateStr);
+
+      // Обновление графика
+      createChart(daysPassed, daysLeft);
+    }
+
+    function resetDates() {
+      document.getElementById("startDateInput").value = "";
+      document.getElementById("endDateInput").value = "";
+      localStorage.removeItem("startDate");
+      localStorage.removeItem("endDate");
+      resetAll();
+      createChart(0, 0);
+    }
+
+    function resetAll() {
+      document.getElementById("totalDays").textContent = "0";
+      document.getElementById("daysPassed").textContent = "0";
+      document.getElementById("daysLeft").textContent = "0";
+      document.getElementById("timeLeft").textContent = "0 дн. 0 ч. 0 м.";
+      document.getElementById("progressPercent").textContent = "0%";
+    }
+
+    function downloadChart() {
+      const link = document.createElement('a');
+      link.download = 'график_прогресса.png';
+      link.href = document.getElementById('pieChart').toDataURL();
+      link.click();
+    }
+
+    // Загрузка из localStorage или URL
+    window.onload = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const storedStart = localStorage.getItem("startDate");
+      const storedEnd = localStorage.getItem("endDate");
+
+      const startDateInput = document.getElementById("startDateInput");
+      const endDateInput = document.getElementById("endDateInput");
+
+      if (urlParams.has("start") && urlParams.has("end")) {
+        startDateInput.value = urlParams.get("start");
+        endDateInput.value = urlParams.get("end");
+      } else if (storedStart && storedEnd) {
+        startDateInput.value = storedStart;
+        endDateInput.value = storedEnd;
+      }
+
+      updateCounter();
+    };
+
+    // Автообновление каждую минуту
+    setInterval(updateCounter, 60000);
+  </script>
+
+</body>
+</html>
